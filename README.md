@@ -17,7 +17,8 @@ Dashboard web interativo em Python (Streamlit) que monitora em tempo real as 5 a
 
 3. **Acesse no navegador:**
    ```
-   http://localhost:8501
+   http://localhost:8501  # Acesso direto ao Streamlit
+   http://localhost        # Acesso via Nginx (proxy reverso)
    ```
 
 ## 🛠️ Tecnologias Utilizadas
@@ -26,7 +27,36 @@ Dashboard web interativo em Python (Streamlit) que monitora em tempo real as 5 a
 - **Streamlit** - Framework web para dashboards
 - **yfinance** - API para dados financeiros do Yahoo Finance
 - **pandas** - Manipulação de dados
+- **Redis** - Cache e sessões
+- **Nginx** - Proxy reverso e load balancing
 - **Docker** - Containerização
+
+## 🐳 Arquitetura Docker
+
+O projeto utiliza uma arquitetura multi-container com os seguintes serviços:
+
+### 📊 Containers
+
+1. **`web`** - Aplicação Streamlit
+   - Porta: 8501
+   - Framework: Streamlit
+   - Função: Dashboard principal
+
+2. **`redis`** - Cache e Sessões
+   - Porta: 6379
+   - Função: Cache de dados e sessões
+   - Persistência: Volume `redis_data`
+
+3. **`nginx`** - Proxy Reverso
+   - Porta: 80
+   - Função: Load balancing e proxy
+   - Configuração: `nginx.conf`
+
+### 🌐 Rede
+- **`app-network`** - Rede bridge para comunicação entre containers
+
+### 💾 Volumes
+- **`redis_data`** - Persistência dos dados do Redis
 
 ## 📊 Funcionalidades
 
@@ -70,29 +100,41 @@ financas/
 │   └── requirements.txt  # Dependências Python
 ├── Dockerfile           # Configuração do container
 ├── docker-compose.yml   # Orquestração Docker
+├── nginx.conf          # Configuração do Nginx
 └── README.md           # Documentação
 ```
 
 ### Comandos Docker Úteis
 
 ```bash
-# Construir e executar
+# Construir e executar todos os containers
 docker-compose up --build
 
 # Executar em background
 docker-compose up -d
 
-# Parar containers
+# Parar todos os containers
 docker-compose down
 
-# Ver logs
+# Ver logs de todos os serviços
 docker-compose logs -f
+
+# Ver logs de um serviço específico
+docker-compose logs -f web
+docker-compose logs -f redis
+docker-compose logs -f nginx
 
 # Reconstruir sem cache
 docker-compose build --no-cache
+
+# Executar apenas o web e redis (sem nginx)
+docker-compose up web redis
+
+# Verificar status dos containers
+docker-compose ps
 ```
 
-## 🔧 Desenvolvimento
+### 🔧 Desenvolvimento
 
 ### Estrutura do Código
 - **`main.py`** - Aplicação principal Streamlit
