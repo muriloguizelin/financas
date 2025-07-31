@@ -8,23 +8,12 @@ services:
       - STREAMLIT_SERVER_ADDRESS=0.0.0.0
     restart: unless-stopped
 
-  rabbitmq:
-    image: rabbitmq:3-management
-    ports:
-      - "5672:5672"
-      - "15672:15672"
-    restart: unless-stopped
-
-  notifier:
-    build: ./notifier
-    depends_on:
-      - rabbitmq
-    restart: unless-stopped
-
   logs:
-    image: busybox:latest
-    command: "sh -c \"while true; do echo '$(date): Dashboard is running' >> /logs/app.log; sleep 30; done\""
+    image: nginx:alpine
+    ports:
+      - "8080:80"
     volumes:
-      - ./logs:/logs
+      - ./logs/nginx.conf:/etc/nginx/nginx.conf
+      - ./logs:/var/log/nginx
     restart: unless-stopped
 
