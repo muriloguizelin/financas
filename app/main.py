@@ -3,6 +3,8 @@ import yfinance as yf
 import pandas as pd
 from datetime import datetime, timedelta
 import time
+import pika
+import json
 
 # Configuração da página
 st.set_page_config(
@@ -114,6 +116,23 @@ def mostrar_dados_ativo(ticker):
             pass
     else:
         st.error(f"Não foi possível encontrar dados para {ticker}")
+
+def send_notification(ticker, target_price, current_price):
+    connection = pika.BlockingConnection(pika.ConnectionParameters('rabbitmq'))
+    channel = connection.channel()
+    channel.queue_declare(queue='stock_alerts')
+    message = {
+        'ticker': ticker,
+        'target_price': target_price,
+        'current_price': current_price
+    }
+    channel.basic_publish(exchange='', routing_key='stock_alerts', body=json.dumps(message))
+    connection.close()
+
+# Exemplo de uso:
+if __name__ == "__main__":
+    # Simule que PETR4.SA atingiu o preço alvo de 40.00
+    send_notification('PETR4.SA', 40.00, 40.05)
 
 # Título principal
 st.title("📈 Dashboard B3 - Top Altas e Baixas do Dia")
