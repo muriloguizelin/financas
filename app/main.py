@@ -3,180 +3,177 @@ import yfinance as yf
 import pandas as pd
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
-import investpy
+import time
 
-# Configuração da página
 st.set_page_config(
-    page_title="Dashboard B3 - Maiores Altas e Baixas do Dia",
-    page_icon="🇧🇷",
+    page_title="Dashboard B3 - Robusto e Otimizado",
+    page_icon="📈",
     layout="wide"
 )
 
-# --- FUNÇÕES DE BUSCA DE DADOS ---
 
-@st.cache_data(ttl=300)  # Cache de 5 minutos
+@st.cache_data(ttl=300)
 def buscar_dados_ativo(ticker):
-    """Busca dados detalhados de um ativo com cache."""
-    try:
-        if not ticker.endswith('.SA'):
-            ticker = f"{ticker}.SA"
+    """
+    Busca dados de um ativo com cache e uma lógica de retentativa
+    para lidar com a instabilidade da API.
+    """
+    tentativas = 3
+    delay = 1
+    for i in range(tentativas):
+        try:
+            ativo = yf.Ticker(ticker)
+            info = ativo.info
             
-        ativo = yf.Ticker(ticker)
-        info = ativo.info
+            hist = ativo.history(period="3mo")
+            if hist.empty:
+                return None
+                
+            preco_atual = hist['Close'].iloc[-1]
+            preco_anterior = hist['Close'].iloc[-2] if len(hist) > 1 else preco_atual
+            
+            variacao_diaria = ((preco_atual - preco_anterior) / preco_anterior) * 100
+            
+            variacao_semanal = ((preco_atual - hist['Close'].iloc[-6]) / hist['Close'].iloc[-6]) * 100 if len(hist) >= 6 else 0
+            variacao_mensal = ((preco_atual - hist['Close'].iloc[-21]) / hist['Close'].iloc[-21]) * 100 if len(hist) >= 21 else 0
+            variacao_anual = ((preco_atual - hist['Close'].iloc[0]) / hist['Close'].iloc[0]) * 100 if len(hist) > 0 else 0
+            
+            return {
+                'ticker': ticker.replace('.SA', ''),
+                'nome': info.get('longName', ticker),
+                'preco': preco_atual,
+                'variacao_diaria': variacao_diaria,
+                'variacao_semanal': variacao_semanal,
+                'variacao_mensal': variacao_mensal,
+                'variacao_anual': variacao_anual,
+                'receita': info.get('totalRevenue', 0),
+                'margem': info.get('profitMargins', 0) * 100 if info.get('profitMargins') else 0,
+                'market_cap': info.get('marketCap', 0),
+                'pvp': info.get('priceToBook', 0),
+                'ebitda': info.get('ebitda', 0),
+                'volume': info.get('volume', 0)
+            }
+        except Exception as e:
+            # Se falhou, espera e tenta de novo.
+            print(f"Tentativa {i+1} falhou para {ticker}: {e}. Tentando novamente em {delay}s...")
+            time.sleep(delay)
+            delay *= 2
+            
+    print(f"Todas as {tentativas} tentativas falharam para {ticker}.")
+    return None
 
-        hist = ativo.history(period="1y")
-        if hist.empty or len(hist) < 2:
-            return None
-
-        preco_atual = hist['Close'].iloc[-1]
-        preco_anterior = hist['Close'].iloc[-2]
-        variacao_diaria = ((preco_atual - preco_anterior) / preco_anterior) * 100 if preco_anterior else 0
-        
-        return {
-            'ticker': ticker.replace('.SA', ''),
-            'nome': info.get('longName', ticker),
-            'preco': preco_atual,
-            'variacao_diaria': variacao_diaria,
-            'pvp': info.get('priceToBook'),
-            'volume': info.get('volume'),
-            'beta': info.get('beta')
-        }
-    except Exception:
-        return None
-
-@st.cache_data(ttl=360) # Cache um pouco maior para a lista de movers
-def buscar_maiores_altas_e_baixas():
-    """
-    Busca os tickers das maiores altas e baixas do dia na B3 usando a investpy.
-    Retorna uma lista única de tickers a serem detalhados.
-    """
-    try:
-        # Busca top 10 de cada para garantir que tenhamos 5 válidos após o filtro
-        df_altas = investpy.stocks.get_stock_gainers(country='brazil')
-        df_baixas = investpy.stocks.get_stock_losers(country='brazil')
-
-        # Extrai os símbolos (tickers) e adiciona '.SA' para compatibilidade com yfinance
-        tickers_altas = [f"{row['symbol']}.SA" for _, row in df_altas.head(10).iterrows()]
-        tickers_baixas = [f"{row['symbol']}.SA" for _, row in df_baixas.head(10).iterrows()]
-        
-        # Junta as listas e remove duplicados
-        todos_tickers = list(set(tickers_altas + tickers_baixas))
-        return todos_tickers
-    except Exception as e:
-        st.error(f"Não foi possível buscar a lista de maiores altas e baixas. O serviço pode estar temporariamente indisponível. Erro: {e}")
-        return []
-
-def buscar_detalhes_em_paralelo(tickers):
-    """Busca os detalhes de uma lista de tickers em paralelo."""
+@st.cache_data(ttl=300)
+def buscar_todos_dados():
+    acoes_monitoradas = [
+        'PETR4.SA', 'VALE3.SA', 'ITUB4.SA', 'BBDC4.SA', 'ABEV3.SA', 'WEGE3.SA', 
+        'RENT3.SA', 'BBAS3.SA', 'B3SA3.SA', 'SUZB3.SA', 'RAIL3.SA', 'UGPA3.SA', 
+        'LREN3.SA', 'MGLU3.SA', 'JBSS3.SA', 'EMBR3.SA', 'GGBR4.SA', 'CSAN3.SA', 'VIVT3.SA'
+    ]
+    fiis_monitorados = [
+        'HGLG11.SA', 'XPML11.SA', 'HABT11.SA', 'IRDM11.SA', 'BTLG11.SA', 'XPIN11.SA', 
+        'HGRU11.SA', 'KNRI11.SA', 'RBRF11.SA', 'VGHF11.SA'
+    ]
+    todos_ativos = acoes_monitoradas + fiis_monitorados
     dados = []
-    with ThreadPoolExecutor(max_workers=10) as executor:
-        resultados = executor.map(buscar_dados_ativo, tickers)
+    
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        resultados = executor.map(buscar_dados_ativo, todos_ativos)
         for resultado in resultados:
             if resultado:
                 dados.append(resultado)
+    
     return dados
 
-# --- FUNÇÕES DE EXIBIÇÃO (UI) ---
-
-def formatar_numero(valor, prefixo="", sufixo="", casas_decimais=2):
-    """Formata um número, retornando 'N/A' se for nulo."""
-    if valor is None or pd.isna(valor):
-        return "N/A"
-    return f"{prefixo}{valor:,.{casas_decimais}f}{sufixo}"
-
-def exibir_cartao_ativo(row):
-    """Exibe um cartão com informações de um ativo."""
-    col_info, col_graf = st.columns([3, 1])
-    with col_info:
-        nome_curto = row['nome'][:30] + '...' if len(row['nome']) > 30 else row['nome']
-        st.markdown(f"**{row['ticker']} - {nome_curto}**")
-        st.markdown(f"Preço: **{formatar_numero(row['preco'], 'R$ ')}** | Variação: **{formatar_numero(row['variacao_diaria'], sufixo='%')}**")
-        st.markdown(f"P/VP: **{formatar_numero(row['pvp'])}** | Beta: **{formatar_numero(row['beta'])}**")
-        
-        cor_barra = "green" if row['variacao_diaria'] > 0 else "red"
-        st.progress(min(abs(row['variacao_diaria']) / 10, 1.0))
-
-    with col_graf:
+def mostrar_dados_ativo(ticker):
+    if not ticker: return
+    if not ticker.endswith('.SA'): ticker = f"{ticker}.SA"
+    with st.spinner(f"Buscando {ticker}..."):
+        dados = buscar_dados_ativo(ticker)
+    if dados:
+        st.subheader(f"📊 Dados de {dados['ticker']}")
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Preço", f"R$ {dados['preco']:.2f}")
+            st.metric("Variação Diária", f"{dados['variacao_diaria']:.2f}%")
+        with col2:
+            st.metric("Receita", f"R$ {dados['receita']/1e9:.1f}B" if dados['receita'] else "N/A")
+            st.metric("Margem", f"{dados['margem']:.1f}%" if dados['margem'] else "N/A")
+        with col3:
+            st.metric("Market Cap", f"R$ {dados['market_cap']/1e9:.1f}B" if dados['market_cap'] else "N/A")
+            st.metric("P/VP", f"{dados['pvp']:.2f}" if dados['pvp'] else "N/A")
         try:
-            ativo_graf = yf.Ticker(f"{row['ticker']}.SA")
-            hist = ativo_graf.history(period="5d", interval="15m")
-            if not hist.empty:
-                st.line_chart(hist['Close'], use_container_width=True, height=100)
-        except Exception:
-            st.empty() # Não mostra nada se o gráfico falhar
-    st.markdown("---")
+            hist = yf.Ticker(ticker).history(period="1mo")
+            if not hist.empty: st.line_chart(hist['Close'], use_container_width=True)
+        except: st.info("Gráfico não disponível.")
+    else: st.error(f"Não foi possível encontrar dados para {ticker}")
 
-
-# --- LAYOUT PRINCIPAL DA APLICAÇÃO ---
-
-st.title("📈 Dashboard B3 - Maiores Altas e Baixas do Dia")
-st.markdown(f"*Dados atualizados pela última vez em: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}*")
+st.title("📈 Dashboard B3 - Desempenho do Mercado")
 st.markdown("---")
-
-# Buscar a lista de ativos do dia (altas e baixas)
-tickers_do_dia = buscar_maiores_altas_e_baixas()
-
-if not tickers_do_dia:
-    st.warning("Não foi possível carregar os dados das maiores altas e baixas. Tente atualizar em alguns minutos.")
-    st.stop()
-
-# Buscar os dados detalhados para esses ativos
-with st.spinner("Buscando dados detalhados dos ativos do dia..."):
-    dados_detalhados = buscar_detalhes_em_paralelo(tickers_do_dia)
-
-if not dados_detalhados:
-    st.error("Falha ao buscar os detalhes dos ativos. A API pode estar indisponível.")
-    st.stop()
-
-# Criar DataFrame e ordenar
-df = pd.DataFrame(dados_detalhados)
-df = df.sort_values(by='variacao_diaria', ascending=False).dropna(subset=['variacao_diaria'])
-
-# Separar em top 5 de altas e baixas
-df_altas = df.head(5)
-df_baixas = df.tail(5).sort_values(by='variacao_diaria', ascending=True)
-
-# Layout em duas colunas
-col1, col2 = st.columns(2)
-
-with col1:
-    st.subheader("🚀 Top 5 Maiores Altas do Dia")
-    if not df_altas.empty:
-        for _, row in df_altas.iterrows():
-            exibir_cartao_ativo(row)
-    else:
-        st.info("Não foi possível carregar as maiores altas.")
-
-with col2:
-    st.subheader("📉 Top 5 Maiores Baixas do Dia")
-    if not df_baixas.empty:
-        for _, row in df_baixas.iterrows():
-            exibir_cartao_ativo(row)
-    else:
-        st.info("Não foi possível carregar as maiores baixas.")
-
-# Tabela completa com todos os dados do dia
-st.subheader("📊 Resumo dos Ativos em Destaque Hoje")
-df_display = df.rename(columns={
-    'ticker': 'Ticker', 'nome': 'Nome', 'preco': 'Preço', 'variacao_diaria': 'Var. Diária (%)',
-    'beta': 'Beta', 'pvp': 'P/VP', 'volume': 'Volume'
-})
-colunas_para_exibir = ['Ticker', 'Nome', 'Preço', 'Var. Diária (%)', 'P/VP', 'Beta', 'Volume']
-st.dataframe(df_display[colunas_para_exibir], use_container_width=True,
-             column_config={
-                 "Preço": st.column_config.NumberColumn(format="R$ %.2f"),
-                 "Var. Diária (%)": st.column_config.ProgressColumn(
-                     label="Variação Diária",
-                     format="%.2f%%",
-                     min_val=df['variacao_diaria'].min(),
-                     max_val=df['variacao_diaria'].max(),
-                 ),
-                 "P/VP": st.column_config.NumberColumn(format="%.2f"),
-                 "Beta": st.column_config.NumberColumn(format="%.2f"),
-                 "Volume": st.column_config.NumberColumn(format="%d")
-             })
-
-# Botão de atualização manual
-if st.button("🔄 Atualizar Dados Agora"):
+st.sidebar.title("🔍 Pesquisar Ativo")
+ticker_pesquisa = st.sidebar.text_input("Digite o ticker (ex: PETR4)", "").upper()
+if ticker_pesquisa:
+    mostrar_dados_ativo(ticker_pesquisa)
+    st.sidebar.markdown("---")
+st.sidebar.title("⚙️ Configurações")
+if st.sidebar.button("🔄 Forçar Atualização"):
     st.cache_data.clear()
     st.rerun()
+
+with st.spinner("Buscando dados de mercado (versão robusta)..."):
+    todos_dados = buscar_todos_dados()
+
+if not todos_dados:
+    st.error("Não foi possível buscar dados dos ativos. Tente atualizar em alguns minutos.")
+    st.stop()
+
+df = pd.DataFrame(todos_dados)
+df_altas = df[df['variacao_diaria'] > 0].nlargest(5, 'variacao_diaria')
+df_baixas = df[df['variacao_diaria'] < 0].nsmallest(5, 'variacao_diaria')
+
+col1, col2 = st.columns(2)
+with col1:
+    st.subheader("🚀 Top 5 Maiores Altas")
+    if not df_altas.empty:
+        for _, row in df_altas.iterrows():
+            st.markdown(f"**{row['ticker']}** - {row['nome'][:30]}")
+            c1, c2 = st.columns(2)
+            c1.metric("Preço", f"R$ {row['preco']:.2f}", f"{row['variacao_diaria']:.2f}%")
+            c2.metric("Market Cap", f"R$ {row['market_cap']/1e9:.1f}B" if row['market_cap'] else "N/A", f"Margem: {row['margem']:.1f}%" if row['margem'] else "N/A")
+            st.markdown("---")
+    else: st.info("Nenhuma alta significativa hoje.")
+with col2:
+    st.subheader("📉 Top 5 Maiores Baixas")
+    if not df_baixas.empty:
+        for _, row in df_baixas.iterrows():
+            st.markdown(f"**{row['ticker']}** - {row['nome'][:30]}")
+            c1, c2 = st.columns(2)
+            c1.metric("Preço", f"R$ {row['preco']:.2f}", f"{row['variacao_diaria']:.2f}%")
+            c2.metric("Market Cap", f"R$ {row['market_cap']/1e9:.1f}B" if row['market_cap'] else "N/A", f"Margem: {row['margem']:.1f}%" if row['margem'] else "N/A")
+            st.markdown("---")
+    else: st.info("Nenhuma baixa significativa hoje.")
+
+st.subheader("📊 Dados Completos")
+df_display = df.copy()
+
+df_display['receita'] = df_display['receita'].apply(lambda x: x/1e9 if x else 0)
+df_display['market_cap'] = df_display['market_cap'].apply(lambda x: x/1e9 if x else 0)
+
+colunas_para_exibir = ['ticker', 'nome', 'preco', 'variacao_diaria', 'variacao_semanal', 'variacao_mensal', 'receita', 'margem', 'market_cap', 'pvp']
+df_display = df_display[colunas_para_exibir].rename(columns={
+    'ticker': 'Ticker', 'nome': 'Nome', 'preco': 'Preço', 'variacao_diaria': 'Var. Diária (%)',
+    'variacao_semanal': 'Var. Semanal (%)', 'variacao_mensal': 'Var. Mensal (%)', 
+    'receita': 'Receita (B)', 'margem': 'Margem (%)', 'market_cap': 'Market Cap (B)', 'pvp': 'P/VP'
+})
+st.dataframe(df_display, use_container_width=True, column_config={
+    "Preço": st.column_config.NumberColumn(format="R$ %.2f"),
+    "Var. Diária (%)": st.column_config.NumberColumn(format="%.2f%%"),
+    "Var. Semanal (%)": st.column_config.NumberColumn(format="%.2f%%"),
+    "Var. Mensal (%)": st.column_config.NumberColumn(format="%.2f%%"),
+    "Receita (B)": st.column_config.NumberColumn(format="R$ %.1fB"),
+    "Margem (%)": st.column_config.NumberColumn(format="%.1f%%"),
+    "Market Cap (B)": st.column_config.NumberColumn(format="R$ %.1fB"),
+    "P/VP": st.column_config.NumberColumn(format="%.2f"),
+}, hide_index=True)
+
+st.markdown("---")
+st.markdown(f"**Última atualização:** {datetime.now().strftime('%d/%m/%Y %H:%M:%S')} | **Ativos carregados com sucesso:** {len(todos_dados)}")
