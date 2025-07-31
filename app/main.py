@@ -41,10 +41,11 @@ def buscar_dados_ativo(ticker):
             'variacao_semanal': variacao_semanal,
             'variacao_mensal': variacao_mensal,
             'variacao_anual': variacao_anual,
-            'dy': info.get('dividendYield', 0) * 100 if info.get('dividendYield') else 0,
             'pvp': info.get('priceToBook', 0),
-            'ebitda': info.get('ebitda', 0),
-            'volume': info.get('volume', 0)
+            'volume': info.get('volume', 0),
+            'market_cap': info.get('marketCap', 0),
+            'pe_ratio': info.get('trailingPE', 0),
+            'beta': info.get('beta', 0)
         }
     except Exception as e:
         return None
@@ -91,26 +92,44 @@ def mostrar_dados_ativo(ticker):
         
         col1, col2, col3 = st.columns(3)
         
+        col1, col2, col3, col4 = st.columns(4)
+        
         with col1:
             st.metric("Preço", f"R$ {dados['preco']:.2f}")
             st.metric("Variação Diária", f"{dados['variacao_diaria']:.2f}%")
         
         with col2:
-            st.metric("DY", f"{dados['dy']:.2f}%")
+            st.metric("Beta", f"{dados['beta']:.2f}" if dados['beta'] else "N/A")
             st.metric("P/VP", f"{dados['pvp']:.2f}")
         
         with col3:
-            st.metric("Variação Semanal", f"{dados['variacao_semanal']:.2f}%")
-            st.metric("Variação Mensal", f"{dados['variacao_mensal']:.2f}%")
+            st.metric("P/E", f"{dados['pe_ratio']:.1f}" if dados['pe_ratio'] else "N/A")
+            st.metric("Volume", f"{dados['volume']:,.0f}" if dados['volume'] else "N/A")
         
-        # Gráfico de histórico
-        try:
-            ativo = yf.Ticker(ticker)
-            hist = ativo.history(period="1mo")
-            if not hist.empty:
-                st.line_chart(hist['Close'])
-        except:
-            pass
+        with col4:
+            st.metric("Market Cap", f"R$ {dados['market_cap']/1e9:.1f}B" if dados['market_cap'] else "N/A")
+            st.metric("Variação Semanal", f"{dados['variacao_semanal']:.2f}%")
+        
+        # Gráfico de histórico e dados adicionais
+        col_graf, col_info = st.columns([2, 1])
+        
+        with col_graf:
+            try:
+                ativo = yf.Ticker(ticker)
+                hist = ativo.history(period="1mo")
+                if not hist.empty:
+                    st.line_chart(hist['Close'], use_container_width=True)
+            except:
+                st.info("Gráfico não disponível")
+        
+        with col_info:
+            st.markdown("**📊 Dados Adicionais:**")
+            st.markdown(f"• **Variação Mensal:** {dados['variacao_mensal']:.2f}%")
+            st.markdown(f"• **Variação Anual:** {dados['variacao_anual']:.2f}%")
+            if dados['market_cap']:
+                st.markdown(f"• **Market Cap:** R$ {dados['market_cap']/1e9:.1f}B")
+            if dados['volume']:
+                st.markdown(f"• **Volume:** {dados['volume']:,.0f}")
     else:
         st.error(f"Não foi possível encontrar dados para {ticker}")
 
@@ -157,14 +176,26 @@ with col1:
     if not df_altas.empty:
         for _, row in df_altas.iterrows():
             with st.container():
-                st.markdown(f"""
-                **{row['ticker']} - {row['nome'][:30]}...**
-                - Preço: R$ {row['preco']:.2f}
-                - Variação: {row['variacao_diaria']:.2f}%
-                - DY: {row['dy']:.2f}%
-                - P/VP: {row['pvp']:.2f}
-                """)
-                st.progress(min(abs(row['variacao_diaria']) / 10, 1.0))
+                col_info, col_graf = st.columns([3, 1])
+                
+                with col_info:
+                    st.markdown(f"""
+                    **{row['ticker']} - {row['nome'][:30]}...**
+                    - Preço: R$ {row['preco']:.2f}
+                    - Variação: {row['variacao_diaria']:.2f}%
+                    - Beta: {row['beta']:.2f}
+                    - P/VP: {row['pvp']:.2f}
+                    """)
+                    st.progress(min(abs(row['variacao_diaria']) / 10, 1.0))
+                
+                with col_graf:
+                    try:
+                        ativo = yf.Ticker(f"{row['ticker']}.SA")
+                        hist = ativo.history(period="5d")
+                        if not hist.empty:
+                            st.line_chart(hist['Close'], use_container_width=True)
+                    except:
+                        pass
                 st.markdown("---")
     else:
         st.info("Nenhuma alta significativa hoje.")
@@ -174,14 +205,26 @@ with col2:
     if not df_baixas.empty:
         for _, row in df_baixas.iterrows():
             with st.container():
-                st.markdown(f"""
-                **{row['ticker']} - {row['nome'][:30]}...**
-                - Preço: R$ {row['preco']:.2f}
-                - Variação: {row['variacao_diaria']:.2f}%
-                - DY: {row['dy']:.2f}%
-                - P/VP: {row['pvp']:.2f}
-                """)
-                st.progress(min(abs(row['variacao_diaria']) / 10, 1.0))
+                col_info, col_graf = st.columns([3, 1])
+                
+                with col_info:
+                    st.markdown(f"""
+                    **{row['ticker']} - {row['nome'][:30]}...**
+                    - Preço: R$ {row['preco']:.2f}
+                    - Variação: {row['variacao_diaria']:.2f}%
+                    - Beta: {row['beta']:.2f}
+                    - P/VP: {row['pvp']:.2f}
+                    """)
+                    st.progress(min(abs(row['variacao_diaria']) / 10, 1.0))
+                
+                with col_graf:
+                    try:
+                        ativo = yf.Ticker(f"{row['ticker']}.SA")
+                        hist = ativo.history(period="5d")
+                        if not hist.empty:
+                            st.line_chart(hist['Close'], use_container_width=True)
+                    except:
+                        pass
                 st.markdown("---")
     else:
         st.info("Nenhuma baixa significativa hoje.")
@@ -196,7 +239,7 @@ df_display['variacao_diaria'] = df_display['variacao_diaria'].apply(lambda x: f"
 df_display['variacao_semanal'] = df_display['variacao_semanal'].apply(lambda x: f"{x:.2f}%")
 df_display['variacao_mensal'] = df_display['variacao_mensal'].apply(lambda x: f"{x:.2f}%")
 df_display['variacao_anual'] = df_display['variacao_anual'].apply(lambda x: f"{x:.2f}%")
-df_display['dy'] = df_display['dy'].apply(lambda x: f"{x:.2f}%")
+df_display['beta'] = df_display['beta'].apply(lambda x: f"{x:.2f}")
 df_display['pvp'] = df_display['pvp'].apply(lambda x: f"{x:.2f}")
 
 # Renomear colunas
@@ -208,12 +251,12 @@ df_display = df_display.rename(columns={
     'variacao_semanal': 'Var. Semanal',
     'variacao_mensal': 'Var. Mensal',
     'variacao_anual': 'Var. Anual',
-    'dy': 'DY',
+    'beta': 'Beta',
     'pvp': 'P/VP'
 })
 
 # Selecionar colunas para exibir
-colunas_exibir = ['Ticker', 'Nome', 'Preço', 'Var. Diária', 'Var. Semanal', 'Var. Mensal', 'Var. Anual', 'DY', 'P/VP']
+colunas_exibir = ['Ticker', 'Nome', 'Preço', 'Var. Diária', 'Var. Semanal', 'Var. Mensal', 'Var. Anual', 'Beta', 'P/VP']
 df_exibir = df_display[colunas_exibir]
 
 st.dataframe(df_exibir, use_container_width=True)
