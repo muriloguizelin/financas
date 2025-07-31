@@ -2,271 +2,181 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor
+import investpy
 
 # Configuração da página
 st.set_page_config(
-    page_title="Dashboard B3 - Top Altas e Baixas",
-    page_icon="📈",
+    page_title="Dashboard B3 - Maiores Altas e Baixas do Dia",
+    page_icon="🇧🇷",
     layout="wide"
 )
 
-# Cache para dados
-@st.cache_data(ttl=300)  # Cache por 5 minutos
+# --- FUNÇÕES DE BUSCA DE DADOS ---
+
+@st.cache_data(ttl=300)  # Cache de 5 minutos
 def buscar_dados_ativo(ticker):
-    """Busca dados de um ativo com cache"""
+    """Busca dados detalhados de um ativo com cache."""
     try:
+        if not ticker.endswith('.SA'):
+            ticker = f"{ticker}.SA"
+            
         ativo = yf.Ticker(ticker)
         info = ativo.info
-        
-        # Dados de cotação
+
         hist = ativo.history(period="1y")
-        if hist.empty:
+        if hist.empty or len(hist) < 2:
             return None
-            
+
         preco_atual = hist['Close'].iloc[-1]
-        preco_anterior = hist['Close'].iloc[-2] if len(hist) > 1 else preco_atual
-        
-        variacao_diaria = ((preco_atual - preco_anterior) / preco_anterior) * 100
-        
-        # Variações
-        variacao_semanal = ((preco_atual - hist['Close'].iloc[-6]) / hist['Close'].iloc[-6]) * 100 if len(hist) >= 6 else 0
-        variacao_mensal = ((preco_atual - hist['Close'].iloc[-21]) / hist['Close'].iloc[-21]) * 100 if len(hist) >= 21 else 0
-        variacao_anual = ((preco_atual - hist['Close'].iloc[0]) / hist['Close'].iloc[0]) * 100 if len(hist) > 0 else 0
+        preco_anterior = hist['Close'].iloc[-2]
+        variacao_diaria = ((preco_atual - preco_anterior) / preco_anterior) * 100 if preco_anterior else 0
         
         return {
             'ticker': ticker.replace('.SA', ''),
             'nome': info.get('longName', ticker),
             'preco': preco_atual,
             'variacao_diaria': variacao_diaria,
-            'variacao_semanal': variacao_semanal,
-            'variacao_mensal': variacao_mensal,
-            'variacao_anual': variacao_anual,
-            'pvp': info.get('priceToBook', 0),
-            'volume': info.get('volume', 0),
-            'market_cap': info.get('marketCap', 0),
-            'pe_ratio': info.get('trailingPE', 0),
-            'beta': info.get('beta', 0)
+            'pvp': info.get('priceToBook'),
+            'volume': info.get('volume'),
+            'beta': info.get('beta')
         }
-    except Exception as e:
+    except Exception:
         return None
 
-@st.cache_data(ttl=300)
-def buscar_todos_dados():
-    """Busca dados de todos os ativos com cache"""
-    # Lista de ações e FIIs para monitorar
-    acoes_monitoradas = [
-        'PETR4.SA', 'VALE3.SA', 'ITUB4.SA', 'BBDC4.SA', 'ABEV3.SA',
-        'WEGE3.SA', 'RENT3.SA', 'BBAS3.SA', 'B3SA3.SA', 'SUZB3.SA',
-        'RAIL3.SA', 'UGPA3.SA', 'LREN3.SA', 'MGLU3.SA',
-        'JBSS3.SA', 'EMBR3.SA', 'GGBR4.SA', 'CSAN3.SA', 'VIVT3.SA'
-    ]
+@st.cache_data(ttl=360) # Cache um pouco maior para a lista de movers
+def buscar_maiores_altas_e_baixas():
+    """
+    Busca os tickers das maiores altas e baixas do dia na B3 usando a investpy.
+    Retorna uma lista única de tickers a serem detalhados.
+    """
+    try:
+        # Busca top 10 de cada para garantir que tenhamos 5 válidos após o filtro
+        df_altas = investpy.stocks.get_stock_gainers(country='brazil')
+        df_baixas = investpy.stocks.get_stock_losers(country='brazil')
 
-    # FIIs populares
-    fiis_monitorados = [
-        'HGLG11.SA', 'XPML11.SA', 'HABT11.SA', 'IRDM11.SA', 'BTLG11.SA',
-        'XPIN11.SA', 'HGRU11.SA', 'KNRI11.SA', 'RBRF11.SA', 'VGHF11.SA'
-    ]
-    
-    todos_ativos = acoes_monitoradas + fiis_monitorados
+        # Extrai os símbolos (tickers) e adiciona '.SA' para compatibilidade com yfinance
+        tickers_altas = [f"{row['symbol']}.SA" for _, row in df_altas.head(10).iterrows()]
+        tickers_baixas = [f"{row['symbol']}.SA" for _, row in df_baixas.head(10).iterrows()]
+        
+        # Junta as listas e remove duplicados
+        todos_tickers = list(set(tickers_altas + tickers_baixas))
+        return todos_tickers
+    except Exception as e:
+        st.error(f"Não foi possível buscar a lista de maiores altas e baixas. O serviço pode estar temporariamente indisponível. Erro: {e}")
+        return []
+
+def buscar_detalhes_em_paralelo(tickers):
+    """Busca os detalhes de uma lista de tickers em paralelo."""
     dados = []
-    
-    for ativo in todos_ativos:
-        dados_ativo = buscar_dados_ativo(ativo)
-        if dados_ativo:
-            dados.append(dados_ativo)
-    
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        resultados = executor.map(buscar_dados_ativo, tickers)
+        for resultado in resultados:
+            if resultado:
+                dados.append(resultado)
     return dados
 
-def mostrar_dados_ativo(ticker):
-    """Mostra dados de um ativo específico"""
-    if not ticker:
-        return
-    
-    # Adicionar .SA se não estiver presente
-    if not ticker.endswith('.SA'):
-        ticker = f"{ticker}.SA"
-    
-    dados = buscar_dados_ativo(ticker)
-    if dados:
-        st.subheader(f"📊 Dados de {dados['ticker']}")
-        
-        col1, col2, col3 = st.columns(3)
-        
-        col1, col2, col3, col4 = st.columns(4)
-        
-        with col1:
-            st.metric("Preço", f"R$ {dados['preco']:.2f}")
-            st.metric("Variação Diária", f"{dados['variacao_diaria']:.2f}%")
-        
-        with col2:
-            st.metric("Beta", f"{dados['beta']:.2f}" if dados['beta'] else "N/A")
-            st.metric("P/VP", f"{dados['pvp']:.2f}")
-        
-        with col3:
-            st.metric("P/E", f"{dados['pe_ratio']:.1f}" if dados['pe_ratio'] else "N/A")
-            st.metric("Volume", f"{dados['volume']:,.0f}" if dados['volume'] else "N/A")
-        
-        with col4:
-            st.metric("Market Cap", f"R$ {dados['market_cap']/1e9:.1f}B" if dados['market_cap'] else "N/A")
-            st.metric("Variação Semanal", f"{dados['variacao_semanal']:.2f}%")
-        
-        # Gráfico de histórico e dados adicionais
-        col_graf, col_info = st.columns([2, 1])
-        
-        with col_graf:
-            try:
-                ativo = yf.Ticker(ticker)
-                hist = ativo.history(period="1mo")
-                if not hist.empty:
-                    st.line_chart(hist['Close'], use_container_width=True)
-            except:
-                st.info("Gráfico não disponível")
-        
-        with col_info:
-            st.markdown("**📊 Dados Adicionais:**")
-            st.markdown(f"• **Variação Mensal:** {dados['variacao_mensal']:.2f}%")
-            st.markdown(f"• **Variação Anual:** {dados['variacao_anual']:.2f}%")
-            if dados['market_cap']:
-                st.markdown(f"• **Market Cap:** R$ {dados['market_cap']/1e9:.1f}B")
-            if dados['volume']:
-                st.markdown(f"• **Volume:** {dados['volume']:,.0f}")
-    else:
-        st.error(f"Não foi possível encontrar dados para {ticker}")
+# --- FUNÇÕES DE EXIBIÇÃO (UI) ---
 
-# Título principal
-st.title("📈 Dashboard B3 - Top Altas e Baixas do Dia")
-st.markdown("---")
+def formatar_numero(valor, prefixo="", sufixo="", casas_decimais=2):
+    """Formata um número, retornando 'N/A' se for nulo."""
+    if valor is None or pd.isna(valor):
+        return "N/A"
+    return f"{prefixo}{valor:,.{casas_decimais}f}{sufixo}"
 
-# Sidebar para pesquisa
-st.sidebar.title("🔍 Pesquisar Ativo")
-ticker_pesquisa = st.sidebar.text_input("Digite o ticker (ex: PETR4)", "").upper()
+def exibir_cartao_ativo(row):
+    """Exibe um cartão com informações de um ativo."""
+    col_info, col_graf = st.columns([3, 1])
+    with col_info:
+        nome_curto = row['nome'][:30] + '...' if len(row['nome']) > 30 else row['nome']
+        st.markdown(f"**{row['ticker']} - {nome_curto}**")
+        st.markdown(f"Preço: **{formatar_numero(row['preco'], 'R$ ')}** | Variação: **{formatar_numero(row['variacao_diaria'], sufixo='%')}**")
+        st.markdown(f"P/VP: **{formatar_numero(row['pvp'])}** | Beta: **{formatar_numero(row['beta'])}**")
+        
+        cor_barra = "green" if row['variacao_diaria'] > 0 else "red"
+        st.progress(min(abs(row['variacao_diaria']) / 10, 1.0))
 
-if ticker_pesquisa:
-    mostrar_dados_ativo(ticker_pesquisa)
+    with col_graf:
+        try:
+            ativo_graf = yf.Ticker(f"{row['ticker']}.SA")
+            hist = ativo_graf.history(period="5d", interval="15m")
+            if not hist.empty:
+                st.line_chart(hist['Close'], use_container_width=True, height=100)
+        except Exception:
+            st.empty() # Não mostra nada se o gráfico falhar
     st.markdown("---")
 
-# Sidebar para configurações
-st.sidebar.title("⚙️ Configurações")
-auto_refresh = st.sidebar.checkbox("Atualização automática", value=True)
-refresh_interval = st.sidebar.slider("Intervalo (segundos)", 30, 300, 60)
 
-if auto_refresh:
-    st.sidebar.info(f"Atualiza a cada {refresh_interval} segundos")
+# --- LAYOUT PRINCIPAL DA APLICAÇÃO ---
 
-# Buscar dados
-with st.spinner("Buscando dados dos ativos..."):
-    todos_dados = buscar_todos_dados()
+st.title("📈 Dashboard B3 - Maiores Altas e Baixas do Dia")
+st.markdown(f"*Dados atualizados pela última vez em: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}*")
+st.markdown("---")
 
-if not todos_dados:
-    st.error("Não foi possível buscar dados dos ativos.")
+# Buscar a lista de ativos do dia (altas e baixas)
+tickers_do_dia = buscar_maiores_altas_e_baixas()
+
+if not tickers_do_dia:
+    st.warning("Não foi possível carregar os dados das maiores altas e baixas. Tente atualizar em alguns minutos.")
     st.stop()
 
-# Criar DataFrame
-df = pd.DataFrame(todos_dados)
+# Buscar os dados detalhados para esses ativos
+with st.spinner("Buscando dados detalhados dos ativos do dia..."):
+    dados_detalhados = buscar_detalhes_em_paralelo(tickers_do_dia)
 
-# Ordenar por variação diária
-df_altas = df[df['variacao_diaria'] > 0].nlargest(5, 'variacao_diaria')
-df_baixas = df[df['variacao_diaria'] < 0].nsmallest(5, 'variacao_diaria')
+if not dados_detalhados:
+    st.error("Falha ao buscar os detalhes dos ativos. A API pode estar indisponível.")
+    st.stop()
+
+# Criar DataFrame e ordenar
+df = pd.DataFrame(dados_detalhados)
+df = df.sort_values(by='variacao_diaria', ascending=False).dropna(subset=['variacao_diaria'])
+
+# Separar em top 5 de altas e baixas
+df_altas = df.head(5)
+df_baixas = df.tail(5).sort_values(by='variacao_diaria', ascending=True)
 
 # Layout em duas colunas
 col1, col2 = st.columns(2)
 
 with col1:
-    st.subheader("🚀 Top 5 Maiores Altas")
+    st.subheader("🚀 Top 5 Maiores Altas do Dia")
     if not df_altas.empty:
         for _, row in df_altas.iterrows():
-            with st.container():
-                col_info, col_graf = st.columns([3, 1])
-                
-                with col_info:
-                    st.markdown(f"""
-                    **{row['ticker']} - {row['nome'][:30]}...**
-                    - Preço: R$ {row['preco']:.2f}
-                    - Variação: {row['variacao_diaria']:.2f}%
-                    - Beta: {row['beta']:.2f}
-                    - P/VP: {row['pvp']:.2f}
-                    """)
-                    st.progress(min(abs(row['variacao_diaria']) / 10, 1.0))
-                
-                with col_graf:
-                    try:
-                        ativo = yf.Ticker(f"{row['ticker']}.SA")
-                        hist = ativo.history(period="5d")
-                        if not hist.empty:
-                            st.line_chart(hist['Close'], use_container_width=True)
-                    except:
-                        pass
-                st.markdown("---")
+            exibir_cartao_ativo(row)
     else:
-        st.info("Nenhuma alta significativa hoje.")
+        st.info("Não foi possível carregar as maiores altas.")
 
 with col2:
-    st.subheader("📉 Top 5 Maiores Baixas")
+    st.subheader("📉 Top 5 Maiores Baixas do Dia")
     if not df_baixas.empty:
         for _, row in df_baixas.iterrows():
-            with st.container():
-                col_info, col_graf = st.columns([3, 1])
-                
-                with col_info:
-                    st.markdown(f"""
-                    **{row['ticker']} - {row['nome'][:30]}...**
-                    - Preço: R$ {row['preco']:.2f}
-                    - Variação: {row['variacao_diaria']:.2f}%
-                    - Beta: {row['beta']:.2f}
-                    - P/VP: {row['pvp']:.2f}
-                    """)
-                    st.progress(min(abs(row['variacao_diaria']) / 10, 1.0))
-                
-                with col_graf:
-                    try:
-                        ativo = yf.Ticker(f"{row['ticker']}.SA")
-                        hist = ativo.history(period="5d")
-                        if not hist.empty:
-                            st.line_chart(hist['Close'], use_container_width=True)
-                    except:
-                        pass
-                st.markdown("---")
+            exibir_cartao_ativo(row)
     else:
-        st.info("Nenhuma baixa significativa hoje.")
+        st.info("Não foi possível carregar as maiores baixas.")
 
-# Tabela completa com todos os dados
-st.subheader("📊 Dados Completos")
-
-# Formatar DataFrame para exibição
-df_display = df.copy()
-df_display['preco'] = df_display['preco'].apply(lambda x: f"R$ {x:.2f}")
-df_display['variacao_diaria'] = df_display['variacao_diaria'].apply(lambda x: f"{x:.2f}%")
-df_display['variacao_semanal'] = df_display['variacao_semanal'].apply(lambda x: f"{x:.2f}%")
-df_display['variacao_mensal'] = df_display['variacao_mensal'].apply(lambda x: f"{x:.2f}%")
-df_display['variacao_anual'] = df_display['variacao_anual'].apply(lambda x: f"{x:.2f}%")
-df_display['beta'] = df_display['beta'].apply(lambda x: f"{x:.2f}")
-df_display['pvp'] = df_display['pvp'].apply(lambda x: f"{x:.2f}")
-
-# Renomear colunas
-df_display = df_display.rename(columns={
-    'ticker': 'Ticker',
-    'nome': 'Nome',
-    'preco': 'Preço',
-    'variacao_diaria': 'Var. Diária',
-    'variacao_semanal': 'Var. Semanal',
-    'variacao_mensal': 'Var. Mensal',
-    'variacao_anual': 'Var. Anual',
-    'beta': 'Beta',
-    'pvp': 'P/VP'
+# Tabela completa com todos os dados do dia
+st.subheader("📊 Resumo dos Ativos em Destaque Hoje")
+df_display = df.rename(columns={
+    'ticker': 'Ticker', 'nome': 'Nome', 'preco': 'Preço', 'variacao_diaria': 'Var. Diária (%)',
+    'beta': 'Beta', 'pvp': 'P/VP', 'volume': 'Volume'
 })
+colunas_para_exibir = ['Ticker', 'Nome', 'Preço', 'Var. Diária (%)', 'P/VP', 'Beta', 'Volume']
+st.dataframe(df_display[colunas_para_exibir], use_container_width=True,
+             column_config={
+                 "Preço": st.column_config.NumberColumn(format="R$ %.2f"),
+                 "Var. Diária (%)": st.column_config.ProgressColumn(
+                     label="Variação Diária",
+                     format="%.2f%%",
+                     min_val=df['variacao_diaria'].min(),
+                     max_val=df['variacao_diaria'].max(),
+                 ),
+                 "P/VP": st.column_config.NumberColumn(format="%.2f"),
+                 "Beta": st.column_config.NumberColumn(format="%.2f"),
+                 "Volume": st.column_config.NumberColumn(format="%d")
+             })
 
-# Selecionar colunas para exibir
-colunas_exibir = ['Ticker', 'Nome', 'Preço', 'Var. Diária', 'Var. Semanal', 'Var. Mensal', 'Var. Anual', 'Beta', 'P/VP']
-df_exibir = df_display[colunas_exibir]
-
-st.dataframe(df_exibir, use_container_width=True)
-
-# Informações adicionais
-st.markdown("---")
-st.markdown(f"**Última atualização:** {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}")
-st.markdown(f"**Total de ativos monitorados:** {len(todos_dados)}")
-
-# Auto-refresh
-if st.button("🔄 Atualizar Dados"):
+# Botão de atualização manual
+if st.button("🔄 Atualizar Dados Agora"):
     st.cache_data.clear()
-    st.rerun() 
+    st.rerun()
