@@ -14,7 +14,6 @@ Dashboard web interativo em Python (Streamlit) que monitora em tempo real as 5 a
 - ✅ **Cache inteligente** para otimização de performance
 
 ### 💾 Funcionalidades do Banco de Dados
-- ✅ **Sistema de Favoritos** - Salve seus ativos preferidos
 - ✅ **Histórico de Consultas** - Acompanhe seus ativos mais pesquisados
 - ✅ **Configurações Salvas** - Suas preferências ficam guardadas
 - ✅ **Persistência de Dados** - Informações mantidas entre sessões
@@ -75,13 +74,7 @@ STREAMLIT_SERVER_PORT=8501  # Porta da aplicação Streamlit
 
 ## 📊 Estrutura do Banco de Dados
 
-A aplicação cria automaticamente 3 tabelas no PostgreSQL:
-
-### 🏷️ Tabela `ativos_favoritos`
-- `id`: Identificador único (SERIAL PRIMARY KEY)
-- `ticker`: Código do ativo (VARCHAR, UNIQUE)
-- `nome`: Nome do ativo (VARCHAR)
-- `data_criacao`: Data de criação (TIMESTAMP)
+A aplicação cria automaticamente 2 tabelas no PostgreSQL:
 
 ### 📋 Tabela `historico_consultas`
 - `id`: Identificador único (SERIAL PRIMARY KEY)
@@ -153,11 +146,10 @@ docker-compose up --build -d
 3. **Atualizar Dados**: Use o botão "Forçar Atualização" para buscar dados mais recentes
 
 ### 🔍 Funcionalidades do Banco de Dados
-1. **⭐ Favoritos**: Adicione ativos aos favoritos clicando no coração
-2. **📋 Histórico**: Veja seus ativos mais consultados na barra lateral
-3. **⚙️ Configurações**: Salve suas preferências (ex: atualização automática)
-4. **Pesquisar Ativo**: Use a barra lateral para buscar um ticker específico
-5. **Ver Dados Detalhados**: Clique em um ativo para ver gráficos e indicadores
+1. **📋 Histórico**: Veja seus ativos mais consultados na barra lateral
+2. **⚙️ Configurações**: Salve suas preferências (ex: atualização automática)
+3. **Pesquisar Ativo**: Use a barra lateral para buscar um ticker específico
+4. **Ver Dados Detalhados**: Clique em um ativo para ver gráficos e indicadores
 
 ## 🔒 Segurança
 

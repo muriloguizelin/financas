@@ -4,190 +4,13 @@ import pandas as pd
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
 import time
-import psycopg2
-import os
-
-# Configuração do banco de dados via variáveis de ambiente
-DB_CONFIG = {
-    'host': os.getenv('DB_HOST', 'postgres'),
-    'port': os.getenv('DB_PORT', '5432'),
-    'database': os.getenv('DB_NAME', 'financas'),
-    'user': os.getenv('DB_USER', 'postgres'),
-    'password': os.getenv('DB_PASSWORD', 'postgres')
-}
-
-def get_db_connection():
-    """Cria conexão com o banco de dados"""
-    try:
-        conn = psycopg2.connect(**DB_CONFIG)
-        return conn
-    except Exception as e:
-        st.error(f"Erro ao conectar ao banco: {e}")
-        return None
-
-def init_database():
-    """Inicializa as tabelas do banco de dados"""
-    conn = get_db_connection()
-    if conn:
-        try:
-            cursor = conn.cursor()
-            
-            # Tabela de ativos favoritos
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS ativos_favoritos (
-                    id SERIAL PRIMARY KEY,
-                    ticker VARCHAR(20) NOT NULL UNIQUE,
-                    nome VARCHAR(255),
-                    data_criacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            ''')
-            
-            # Tabela de histórico de consultas
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS historico_consultas (
-                    id SERIAL PRIMARY KEY,
-                    ticker VARCHAR(20) NOT NULL,
-                    data_consulta TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            ''')
-            
-            # Tabela de configurações do usuário
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS configuracoes_usuario (
-                    id SERIAL PRIMARY KEY,
-                    chave VARCHAR(50) NOT NULL UNIQUE,
-                    valor TEXT,
-                    data_atualizacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            ''')
-            
-            conn.commit()
-            st.success("✅ Banco de dados conectado e tabelas criadas!")
-        except Exception as e:
-            st.error(f"Erro ao criar tabelas: {e}")
-        finally:
-            conn.close()
-
-def salvar_favorito(ticker, nome):
-    """Salva um ativo como favorito"""
-    conn = get_db_connection()
-    if conn:
-        try:
-            cursor = conn.cursor()
-            cursor.execute(
-                'INSERT INTO ativos_favoritos (ticker, nome) VALUES (%s, %s) ON CONFLICT (ticker) DO NOTHING',
-                (ticker, nome)
-            )
-            conn.commit()
-            return True
-        except Exception as e:
-            st.error(f"Erro ao salvar favorito: {e}")
-            return False
-        finally:
-            conn.close()
-    return False
-
-def remover_favorito(ticker):
-    """Remove um ativo dos favoritos"""
-    conn = get_db_connection()
-    if conn:
-        try:
-            cursor = conn.cursor()
-            cursor.execute('DELETE FROM ativos_favoritos WHERE ticker = %s', (ticker,))
-            conn.commit()
-            return True
-        except Exception as e:
-            st.error(f"Erro ao remover favorito: {e}")
-            return False
-        finally:
-            conn.close()
-    return False
-
-def get_favoritos():
-    """Retorna lista de favoritos"""
-    conn = get_db_connection()
-    if conn:
-        try:
-            cursor = conn.cursor()
-            cursor.execute('SELECT ticker, nome FROM ativos_favoritos ORDER BY data_criacao DESC')
-            return cursor.fetchall()
-        except Exception as e:
-            st.error(f"Erro ao buscar favoritos: {e}")
-            return []
-        finally:
-            conn.close()
-    return []
-
-def salvar_consulta(ticker):
-    """Registra uma consulta no histórico"""
-    conn = get_db_connection()
-    if conn:
-        try:
-            cursor = conn.cursor()
-            cursor.execute('INSERT INTO historico_consultas (ticker) VALUES (%s)', (ticker,))
-            conn.commit()
-        except Exception as e:
-            print(f"Erro ao salvar consulta: {e}")
-        finally:
-            conn.close()
-
-def get_historico_consultas(limit=10):
-    """Retorna histórico de consultas"""
-    conn = get_db_connection()
-    if conn:
-        try:
-            cursor = conn.cursor()
-            cursor.execute('''
-                SELECT ticker, COUNT(*) as consultas, MAX(data_consulta) as ultima_consulta 
-                FROM historico_consultas 
-                GROUP BY ticker 
-                ORDER BY consultas DESC, ultima_consulta DESC 
-                LIMIT %s
-            ''', (limit,))
-            return cursor.fetchall()
-        except Exception as e:
-            st.error(f"Erro ao buscar histórico: {e}")
-            return []
-        finally:
-            conn.close()
-    return []
-
-def salvar_configuracao(chave, valor):
-    """Salva uma configuração do usuário"""
-    conn = get_db_connection()
-    if conn:
-        try:
-            cursor = conn.cursor()
-            cursor.execute('''
-                INSERT INTO configuracoes_usuario (chave, valor) 
-                VALUES (%s, %s) 
-                ON CONFLICT (chave) 
-                DO UPDATE SET valor = EXCLUDED.valor, data_atualizacao = CURRENT_TIMESTAMP
-            ''', (chave, valor))
-            conn.commit()
-            return True
-        except Exception as e:
-            st.error(f"Erro ao salvar configuração: {e}")
-            return False
-        finally:
-            conn.close()
-    return False
-
-def get_configuracao(chave, valor_padrao=None):
-    """Retorna uma configuração do usuário"""
-    conn = get_db_connection()
-    if conn:
-        try:
-            cursor = conn.cursor()
-            cursor.execute('SELECT valor FROM configuracoes_usuario WHERE chave = %s', (chave,))
-            resultado = cursor.fetchone()
-            return resultado[0] if resultado else valor_padrao
-        except Exception as e:
-            st.error(f"Erro ao buscar configuração: {e}")
-            return valor_padrao
-        finally:
-            conn.close()
-    return valor_padrao
+from database import (
+    init_database, 
+    salvar_consulta, 
+    get_historico_consultas, 
+    salvar_configuracao, 
+    get_configuracao
+)
 
 st.set_page_config(
     page_title="Dashboard B3 - Robusto e Otimizado",
@@ -279,19 +102,6 @@ def mostrar_dados_ativo(ticker):
     if dados:
         st.subheader(f"📊 Dados de {dados['ticker']}")
         
-        # Botão para adicionar/remover dos favoritos
-        favoritos = [f[0] for f in get_favoritos()]
-        if dados['ticker'] in favoritos:
-            if st.button(f"❤️ Remover {dados['ticker']} dos favoritos"):
-                if remover_favorito(dados['ticker']):
-                    st.success(f"{dados['ticker']} removido dos favoritos!")
-                    st.rerun()
-        else:
-            if st.button(f"🤍 Adicionar {dados['ticker']} aos favoritos"):
-                if salvar_favorito(dados['ticker'], dados['nome']):
-                    st.success(f"{dados['ticker']} adicionado aos favoritos!")
-                    st.rerun()
-        
         col1, col2, col3 = st.columns(3)
         with col1:
             st.metric("Preço", f"R$ {dados['preco']:.2f}")
@@ -320,24 +130,6 @@ ticker_pesquisa = st.sidebar.text_input("Digite o ticker (ex: PETR4)", "").upper
 if ticker_pesquisa:
     mostrar_dados_ativo(ticker_pesquisa)
     st.sidebar.markdown("---")
-
-# Seção de Favoritos
-st.sidebar.title("⭐ Favoritos")
-favoritos = get_favoritos()
-if favoritos:
-    for ticker, nome in favoritos:
-        col1, col2 = st.sidebar.columns([3, 1])
-        with col1:
-            if st.button(f"{ticker}", key=f"fav_{ticker}"):
-                st.session_state.ticker_pesquisa = ticker
-                st.rerun()
-        with col2:
-            if st.button("❌", key=f"del_{ticker}"):
-                if remover_favorito(ticker):
-                    st.success(f"{ticker} removido!")
-                    st.rerun()
-else:
-    st.sidebar.info("Nenhum favorito adicionado ainda.")
 
 # Seção de Histórico
 st.sidebar.title("📋 Histórico de Consultas")
