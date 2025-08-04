@@ -20,10 +20,6 @@ st.set_page_config(
 
 @st.cache_data(ttl=300)
 def buscar_dados_ativo(ticker):
-    """
-    Busca dados de um ativo com cache e uma lógica de retentativa
-    para lidar com a instabilidade da API.
-    """
     tentativas = 3
     delay = 1
     for i in range(tentativas):
@@ -60,7 +56,6 @@ def buscar_dados_ativo(ticker):
                 'volume': info.get('volume', 0)
             }
         except Exception as e:
-            # Se falhou, espera e tenta de novo.
             print(f"Tentativa {i+1} falhou para {ticker}: {e}. Tentando novamente em {delay}s...")
             time.sleep(delay)
             delay *= 2
@@ -94,7 +89,6 @@ def mostrar_dados_ativo(ticker):
     if not ticker: return
     if not ticker.endswith('.SA'): ticker = f"{ticker}.SA"
     
-    # Salvar consulta no histórico
     salvar_consulta(ticker.replace('.SA', ''))
     
     with st.spinner(f"Buscando {ticker}..."):
@@ -118,20 +112,17 @@ def mostrar_dados_ativo(ticker):
         except: st.info("Gráfico não disponível.")
     else: st.error(f"Não foi possível encontrar dados para {ticker}")
 
-# Inicializar banco de dados
 init_database()
 
 st.title("📈 Dashboard B3 - Desempenho do Mercado")
 st.markdown("---")
 
-# Sidebar com funcionalidades do banco
 st.sidebar.title("🔍 Pesquisar Ativo")
 ticker_pesquisa = st.sidebar.text_input("Digite o ticker (ex: PETR4)", "").upper()
 if ticker_pesquisa:
     mostrar_dados_ativo(ticker_pesquisa)
     st.sidebar.markdown("---")
 
-# Seção de Histórico
 st.sidebar.title("📋 Histórico de Consultas")
 historico = get_historico_consultas(5)
 if historico:
@@ -142,7 +133,6 @@ if historico:
 else:
     st.sidebar.info("Nenhuma consulta registrada.")
 
-# Configurações
 st.sidebar.title("⚙️ Configurações")
 auto_refresh = st.sidebar.checkbox(
     "Atualização automática", 
@@ -157,7 +147,6 @@ if st.sidebar.button("🔄 Forçar Atualização"):
     st.cache_data.clear()
     st.rerun()
 
-# Verificar se há ticker na sessão
 if 'ticker_pesquisa' in st.session_state:
     mostrar_dados_ativo(st.session_state.ticker_pesquisa)
     del st.session_state.ticker_pesquisa

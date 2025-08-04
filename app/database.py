@@ -26,7 +26,6 @@ def init_database():
         try:
             cursor = conn.cursor()
             
-            # Tabela de histórico de consultas
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS historico_consultas (
                     id SERIAL PRIMARY KEY,
@@ -35,7 +34,6 @@ def init_database():
                 )
             ''')
             
-            # Tabela de configurações do usuário
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS configuracoes_usuario (
                     id SERIAL PRIMARY KEY,

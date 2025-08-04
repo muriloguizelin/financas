@@ -1,169 +1,62 @@
 # 📈 Dashboard B3 - Top Altas e Baixas
 
-Dashboard web interativo em Python (Streamlit) que monitora em tempo real as 5 ações e FIIs que mais subiram e caíram no dia, com indicadores fundamentais da B3 e integração com banco de dados PostgreSQL.
+Dashboard web interativo que monitora as maiores altas e baixas da B3 (Ações e FIIs), com consulta de indicadores e histórico de buscas salvo em banco de dados.
 
-## 🚀 Funcionalidades
+---
 
-### 📈 Dashboard Principal
-- ✅ **Top 5 Maiores Altas** do dia com indicadores
-- ✅ **Top 5 Maiores Baixas** do dia com indicadores
-- ✅ **Tabela completa** com todos os ativos monitorados
-- ✅ **Busca por ticker** específico
-- ✅ **Dados detalhados** do ativo selecionado
-- ✅ **Gráfico histórico** de 1 mês
-- ✅ **Cache inteligente** para otimização de performance
+### ✨ Funcionalidades Principais
+- **Monitoramento em tempo real** do Top 5 de altas e baixas.
+- **Tabela completa** de ativos com indicadores fundamentalistas.
+- **Consulta de ticker específico** com dados detalhados e gráfico histórico.
+- **Histórico de consultas** e salvamento de preferências do usuário.
+- **Cache inteligente** para otimização da busca de dados.
 
-### 💾 Funcionalidades do Banco de Dados
-- ✅ **Histórico de Consultas** - Acompanhe seus ativos mais pesquisados
-- ✅ **Configurações Salvas** - Suas preferências ficam guardadas
-- ✅ **Persistência de Dados** - Informações mantidas entre sessões
+### 🛠️ Tecnologias
+Python | Streamlit | PostgreSQL | Docker | Nginx | yfinance
 
-## 🛠️ Tecnologias Utilizadas
+---
 
-- **Python 3.11** - Linguagem principal
-- **Streamlit** - Framework web para dashboards
-- **yfinance** - API para dados financeiros do Yahoo Finance
-- **pandas** - Manipulação de dados
-- **PostgreSQL** - Banco de dados para armazenamento
-- **psycopg2** - Driver PostgreSQL para Python
-- **Nginx** - Proxy reverso e monitoramento de logs
-- **Docker** - Containerização
+### 🚀 Como Executar
 
-## 📋 Pré-requisitos
+**Pré-requisitos:** Git, Docker e Docker Compose.
 
-- Docker
-- Docker Compose
-- Git
+1.  **Clone o repositório:**
+    ```bash
+    git clone [https://github.com/seu-usuario/financas-app.git](https://github.com/seu-usuario/financas-app.git)
+    cd financas-app
+    ```
 
-## 🚀 Como Executar
+2.  **Suba os containers:**
+    ```bash
+    docker-compose up -d
+    ```
 
-### 1. Clone o repositório
-```bash
-git clone https://github.com/seu-usuario/financas-app.git
-cd financas-app
-```
+3.  **Acesse o dashboard:**
+    Abra seu navegador em: `http://localhost:8080`
 
-### 2. Configure o repositório no Dockerfile
-Edite o arquivo `Dockerfile` e substitua a URL do repositório:
-```dockerfile
-RUN git clone https://github.com/seu-usuario/financas-app.git .
-```
+---
 
-### 3. Execute com Docker Compose
-```bash
-docker-compose up -d
-```
+### 🐳 Comandos Úteis
 
-### 4. Acesse a aplicação
-Abra seu navegador e acesse: http://localhost:8080
+-   **Ver logs da aplicação:**
+    ```bash
+    docker-compose logs -f web
+    ```
 
-## 🔧 Configuração
+-   **Conectar ao banco de dados:**
+    ```bash
+    docker-compose exec postgres psql -U postgres -d financas
+    ```
 
-### Variáveis de Ambiente
+-   **Parar a aplicação:**
+    ```bash
+    docker-compose down
+    ```
 
-A aplicação usa as seguintes variáveis de ambiente (já configuradas no docker-compose.yml):
+-   **Reconstruir as imagens e executar:**
+    ```bash
+    docker-compose up --build -d
+    ```
 
-```env
-DB_HOST=postgres          # Host do banco de dados
-DB_PORT=5432             # Porta do PostgreSQL
-DB_NAME=financas         # Nome do banco de dados
-DB_USER=postgres         # Usuário do banco
-DB_PASSWORD=postgres     # Senha do banco
-STREAMLIT_SERVER_PORT=8501  # Porta da aplicação Streamlit
-```
-
-## 📊 Estrutura do Banco de Dados
-
-A aplicação cria automaticamente 2 tabelas no PostgreSQL:
-
-### 📋 Tabela `historico_consultas`
-- `id`: Identificador único (SERIAL PRIMARY KEY)
-- `ticker`: Código do ativo consultado (VARCHAR)
-- `data_consulta`: Data/hora da consulta (TIMESTAMP)
-
-### ⚙️ Tabela `configuracoes_usuario`
-- `id`: Identificador único (SERIAL PRIMARY KEY)
-- `chave`: Nome da configuração (VARCHAR, UNIQUE)
-- `valor`: Valor da configuração (TEXT)
-- `data_atualizacao`: Data da última atualização (TIMESTAMP)
-
-## 📈 Ativos Monitorados
-
-### 🏢 Ações Principais
-PETR4, VALE3, ITUB4, BBDC4, ABEV3, WEGE3, RENT3, BBAS3, B3SA3, SUZB3, RAIL3, UGPA3, LREN3, MGLU3, JBSS3, EMBR3, GGBR4, CSAN3, VIVT3
-
-### 🏠 FIIs Populares
-HGLG11, XPML11, HABT11, IRDM11, BTLG11, XPIN11, HGRU11, KNRI11, RBRF11, VGHF11
-
-## 🐳 Containers Docker
-
-O projeto utiliza três containers:
-
-1. **web**: Aplicação Streamlit (porta 8501)
-2. **postgres**: Banco de dados PostgreSQL (porta 5432)
-3. **logs**: Proxy reverso Nginx (porta 8080)
-
-## 📁 Estrutura do Projeto
-
-```
-financas-app/
-├── app/
-│   ├── main.py              # Aplicação Streamlit
-│   └── requirements.txt     # Dependências Python
-├── docker-compose.yml       # Configuração dos containers
-├── Dockerfile              # Imagem da aplicação
-├── logs/                   # Logs do Nginx
-└── README.md               # Este arquivo
-```
-
-## 🔍 Comandos Úteis
-
-### Ver logs da aplicação
-```bash
-docker-compose logs web
-```
-
-### Conectar ao banco de dados
-```bash
-docker-compose exec postgres psql -U postgres -d financas
-```
-
-### Parar os containers
-```bash
-docker-compose down
-```
-
-### Reconstruir e executar
-```bash
-docker-compose up --build -d
-```
-
-## 🎯 Como Usar
-
-### 📊 Dashboard Principal
-1. **Visualizar Top Altas/Baixas**: Acompanhe as 5 ações e FIIs com maior variação
-2. **Tabela Completa**: Veja todos os ativos monitorados com indicadores
-3. **Atualizar Dados**: Use o botão "Forçar Atualização" para buscar dados mais recentes
-
-### 🔍 Funcionalidades do Banco de Dados
-1. **📋 Histórico**: Veja seus ativos mais consultados na barra lateral
-2. **⚙️ Configurações**: Salve suas preferências (ex: atualização automática)
-3. **Pesquisar Ativo**: Use a barra lateral para buscar um ticker específico
-4. **Ver Dados Detalhados**: Clique em um ativo para ver gráficos e indicadores
-
-## 🔒 Segurança
-
-⚠️ **Importante**: Esta é uma aplicação de demonstração. Para uso em produção:
-
-- Altere as senhas padrão
-- Use variáveis de ambiente seguras
-- Configure HTTPS
-- Implemente autenticação de usuários
-
-## 📝 Licença
-
-Este projeto é de código aberto e está disponível sob a licença MIT.
-
-## 🤝 Contribuição
-
-Contribuições são bem-vindas! Sinta-se à vontade para abrir issues ou pull requests.
+---
+> ⚠️ **Aviso:** Esta é uma aplicação de demonstração. Para uso em produção, altere as senhas padrão, configure HTTPS e implemente um sistema de autenticação."
