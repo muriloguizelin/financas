@@ -11,7 +11,6 @@ DB_CONFIG = {
 }
 
 def get_db_connection():
-    """Cria conexão com o banco de dados"""
     try:
         conn = psycopg2.connect(**DB_CONFIG)
         return conn
@@ -20,7 +19,6 @@ def get_db_connection():
         return None
 
 def init_database():
-    """Inicializa as tabelas do banco de dados"""
     conn = get_db_connection()
     if conn:
         try:
@@ -51,7 +49,6 @@ def init_database():
             conn.close()
 
 def salvar_consulta(ticker):
-    """Registra uma consulta no histórico"""
     conn = get_db_connection()
     if conn:
         try:
@@ -64,7 +61,6 @@ def salvar_consulta(ticker):
             conn.close()
 
 def get_historico_consultas(limit=10):
-    """Retorna histórico de consultas"""
     conn = get_db_connection()
     if conn:
         try:
@@ -85,7 +81,6 @@ def get_historico_consultas(limit=10):
     return []
 
 def salvar_configuracao(chave, valor):
-    """Salva uma configuração do usuário"""
     conn = get_db_connection()
     if conn:
         try:
@@ -106,7 +101,6 @@ def salvar_configuracao(chave, valor):
     return False
 
 def get_configuracao(chave, valor_padrao=None):
-    """Retorna uma configuração do usuário"""
     conn = get_db_connection()
     if conn:
         try:
